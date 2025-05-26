@@ -228,8 +228,28 @@ router.post('/logout', (req, res) => {
 // @access  Private
 router.get('/me', async (req, res) => {
   try {
-    // Get token from header
-    const token = req.cookies.token || req.header('x-auth-token');
+    // Get token from multiple possible sources
+    let token = null;
+    
+    // Check Authorization header with Bearer token (primary method)
+    const authHeader = req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+    // Fallback to cookies or x-auth-token header
+    else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    else if (req.header('x-auth-token')) {
+      token = req.header('x-auth-token');
+    }
+    
+    console.log('Auth /me endpoint token sources:', {
+      hasAuthHeader: !!authHeader,
+      hasCookieToken: !!req.cookies?.token,
+      hasXAuthToken: !!req.header('x-auth-token'),
+      token: token ? `${token.substring(0, 10)}...` : null
+    });
     
     if (!token) {
       return res.status(401).json({

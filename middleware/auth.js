@@ -9,36 +9,45 @@ const auth = async (req, res, next) => {
     // Log all headers for debugging
     console.log('Request headers:', {
       authorization: req.headers.authorization ? '***present***' : 'missing',
-      'content-type': req.headers['content-type'] || 'not set'
+      'x-auth-token': req.headers['x-auth-token'] ? '***present***' : 'missing',
+      'content-type': req.headers['content-type'] || 'not set',
+      cookie: req.headers.cookie ? '***present***' : 'missing'
     });
     
-    const authHeader = req.header('Authorization');
+    // Get token from multiple possible sources
+    let token = null;
     
-    if (!authHeader) {
-      console.error('❌ No Authorization header found');
+    // Check Authorization header with Bearer token (primary method)
+    const authHeader = req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+    // Fallback to cookies or x-auth-token header
+    else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    else if (req.header('x-auth-token')) {
+      token = req.header('x-auth-token');
+    }
+    // Finally check request body
+    else if (req.body && req.body.token) {
+      token = req.body.token;
+    }
+    
+    console.log('Auth middleware token sources:', {
+      hasAuthHeader: !!authHeader,
+      hasCookieToken: !!req.cookies?.token,
+      hasXAuthToken: !!req.header('x-auth-token'),
+      hasBodyToken: !!(req.body && req.body.token),
+      token: token ? `${token.substring(0, 10)}...` : null
+    });
+    
+    if (!token) {
+      console.error('❌ No token found in any source');
       return res.status(401).json({ 
         success: false,
         error: 'No authentication token provided',
-        details: 'Missing Authorization header'
-      });
-    }
-
-    if (!authHeader.startsWith('Bearer ')) {
-      console.error('❌ Invalid Authorization header format');
-      return res.status(401).json({ 
-        success: false,
-        error: 'Invalid token format',
-        details: 'Expected: Bearer <token>'
-      });
-    }
-
-    const token = authHeader.split(' ')[1];
-    
-    if (!token) {
-      console.error('❌ No token found in Authorization header');
-      return res.status(401).json({ 
-        success: false, 
-        error: 'No authentication token provided' 
+        details: 'Token not found in Authorization header, cookies, or x-auth-token header'
       });
     }
 

@@ -11,30 +11,52 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Simple CORS setup for development - allows credentials and specific origins
+// Enhanced CORS setup for production and development
 const corsOptions = {
-  origin: ['https://student-expense-tracker-frontend.vercel.app','http://localhost:3000', 'http://127.0.0.1:3000' ],
+  origin: [
+    'https://student-expense-tracker-frontend.vercel.app',
+    'https://student-expense-tracker.vercel.app',
+    'http://localhost:3000', 
+    'http://127.0.0.1:3000'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'Accept'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'X-CSRF-Token', 
+    'Accept', 
+    'x-auth-token'
+  ],
   exposedHeaders: ['set-cookie', 'Authorization'],
   optionsSuccessStatus: 200
 };
 
-// Apply CORS with the specified options
+// Trust first proxy (needed for secure cookies in production)
+app.set('trust proxy', 1);
+
+// Apply CORS with the specified options - ensure this is before any routes
 app.use(cors(corsOptions));
 
 // Handle OPTIONS preflight requests explicitly
 app.options('*', cors(corsOptions));
 
-// Trust first proxy (needed for secure cookies in production)
-app.set('trust proxy', 1);
-
-// Handle preflight requests with proper CORS options
-app.options('*', cors(corsOptions));
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
+// Add debug middleware for CORS issues
+app.use((req, res, next) => {
+  // Log CORS-related headers
+  console.log('CORS Debug - Request headers:', {
+    origin: req.headers.origin || 'not set',
+    referer: req.headers.referer || 'not set',
+    host: req.headers.host || 'not set'
+  });
+  
+  // Add CORS headers for all responses
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Continue to next middleware
+  next();
+});
 
 // Parse cookies and JSON bodies
 app.use(cookieParser());
