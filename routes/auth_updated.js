@@ -281,8 +281,36 @@ router.get('/me', async (req, res) => {
 // @access  Private
 router.post('/refresh-token', async (req, res) => {
   try {
-    // Get refresh token from cookies or authorization header
-    const token = req.cookies.token || req.header('x-auth-token');
+    // Get refresh token from multiple possible sources
+    let token = null;
+    
+    // Check cookies first
+    if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+    // Then check x-auth-token header
+    else if (req.header('x-auth-token')) {
+      token = req.header('x-auth-token');
+    }
+    // Then check Authorization header with Bearer token
+    else if (req.header('Authorization')) {
+      const authHeader = req.header('Authorization');
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+    // Finally check request body
+    else if (req.body && req.body.token) {
+      token = req.body.token;
+    }
+    
+    console.log('Token refresh attempt with token sources:', {
+      hasCookieToken: !!req.cookies?.token,
+      hasXAuthToken: !!req.header('x-auth-token'),
+      hasAuthHeader: !!req.header('Authorization'),
+      hasBodyToken: !!(req.body && req.body.token),
+      token: token ? `${token.substring(0, 10)}...` : null
+    });
     
     if (!token) {
       return res.status(401).json({
