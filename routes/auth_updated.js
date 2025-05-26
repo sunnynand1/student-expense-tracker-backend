@@ -276,4 +276,71 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/refresh-token
+// @desc    Refresh the JWT token
+// @access  Private
+router.post('/refresh-token', async (req, res) => {
+  try {
+    // Get refresh token from cookies or authorization header
+    const token = req.cookies.token || req.header('x-auth-token');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token, authorization denied'
+      });
+    }
+
+    // Verify the existing token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    
+    // Get user from database
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Generate a new token
+    const userData = user.get({ plain: true });
+    delete userData.password;
+    
+    const newToken = generateToken(userData);
+    
+    // Set HTTP-only cookie with new token
+    res.cookie('token', newToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    // Return the new token
+    res.json({
+      success: true,
+      token: newToken
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    // If token is invalid or expired
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired token'
+      });
+    }
+    // For other server errors
+    res.status(500).json({
+      success: false,
+      message: 'Server error during token refresh',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;
