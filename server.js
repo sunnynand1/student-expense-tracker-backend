@@ -166,9 +166,7 @@ app.use('/api/documents', documentsRoutes);
 const reportsRoutes = require('./routes/reports');
 app.use('/api/reports', reportsRoutes);
 
-// Team routes
-const teamRoutes = require('./routes/team');
-app.use('/api/team', teamRoutes);
+// Team routes have been removed
 
 // 404 handler
 app.use((req, res) => {
