@@ -63,7 +63,7 @@ router.get('/:id', auth, async (req, res) => {
 // @access  Private
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, amount, category, period } = req.body;
+    const { name, amount, category, period, planId, planName } = req.body;
 
     // Validation
     if (!name || !amount || !category) {
@@ -78,6 +78,8 @@ router.post('/', auth, async (req, res) => {
       amount,
       category,
       period: period || 'monthly',
+      planId,
+      planName,
       userId: req.user.id
     });
 
@@ -99,7 +101,7 @@ router.post('/', auth, async (req, res) => {
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { name, amount, category, period } = req.body;
+    const { name, amount, category, period, planId, planName } = req.body;
 
     // Find the budget
     const budget = await Budget.findOne({
@@ -121,6 +123,10 @@ router.put('/:id', auth, async (req, res) => {
     budget.amount = amount || budget.amount;
     budget.category = category || budget.category;
     budget.period = period || budget.period;
+    
+    // Only update plan fields if they are provided
+    if (planId !== undefined) budget.planId = planId;
+    if (planName !== undefined) budget.planName = planName;
 
     await budget.save();
 

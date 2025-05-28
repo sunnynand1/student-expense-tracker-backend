@@ -23,6 +23,14 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('weekly', 'monthly', 'quarterly', 'yearly'),
       defaultValue: 'monthly'
     },
+    planId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    planName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
