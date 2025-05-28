@@ -147,7 +147,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Auth routes
-const authRoutes = require('./routes/auth_updated');
+const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
 
 // Expenses routes
