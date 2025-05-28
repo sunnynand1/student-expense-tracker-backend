@@ -65,31 +65,68 @@ if (railwayConnectionString) {
   });
 }
 
-// Test database connection
+// Test database connection with detailed error reporting
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connection has been established successfully.');
+    
+    // Log connection details (but mask sensitive info)
+    const config = sequelize.config;
+    console.log(`Connected to ${config.dialect} database at ${config.host}:${config.port}/${config.database}`);
+    
     return true;
   } catch (error) {
-    console.error('❌ Unable to connect to the database:', error);
+    console.error('❌ Unable to connect to the database:', error.message);
+    console.error('Error details:', {
+      name: error.name,
+      code: error.original?.code,
+      errno: error.original?.errno,
+      sqlState: error.original?.sqlState,
+      sqlMessage: error.original?.sqlMessage
+    });
+    
+    // Check for common connection errors and provide helpful messages
+    if (error.original?.code === 'ECONNREFUSED') {
+      console.error('Database server is not running or not accessible at the specified host and port.');
+    } else if (error.original?.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error('Access denied: Invalid username or password.');
+    } else if (error.original?.code === 'ER_BAD_DB_ERROR') {
+      console.error('Database does not exist. You may need to create it first.');
+    } else if (error.original?.code === 'ETIMEDOUT') {
+      console.error('Connection timed out. Check network connectivity or firewall settings.');
+    }
+    
     return false;
   }
 };
 
-// Sync all models
+// Sync all models with improved error handling
 const syncDatabase = async () => {
   try {
     console.log('🔍 Starting database sync...');
     
     // Use a safer sync mode first to check connection
-    await sequelize.authenticate();
-    console.log('✅ Authentication successful, attempting to sync models');
+    console.log('🔄 Testing database connection...');
+    const connectionSuccessful = await testConnection();
+    if (!connectionSuccessful) {
+      throw new Error('Failed to establish database connection. Cannot proceed with sync.');
+    }
     
     // Use force: false and alter: false first to avoid index issues
     console.log('🔄 Performing initial sync with no schema changes...');
-    await sequelize.sync({ force: false, alter: false });
-    console.log('✅ Initial sync completed');
+    try {
+      await sequelize.sync({ force: false, alter: false });
+      console.log('✅ Initial sync completed');
+    } catch (syncError) {
+      console.error('❌ Error during initial sync:', syncError.message);
+      console.error('Error details:', {
+        name: syncError.name,
+        code: syncError.original?.code,
+        sqlMessage: syncError.original?.sqlMessage
+      });
+      throw new Error('Failed to perform initial database sync');
+    }
     
     // Instead of altering tables automatically, execute specific SQL to fix foreign keys
     try {
