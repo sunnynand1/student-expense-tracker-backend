@@ -4,8 +4,10 @@ const cors = require('cors');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const { testConnection, syncDatabase } = require('./config/db');
+const authRoutes = require('./routes/auth_updated');
 const bcrypt = require('bcryptjs');
 
+// Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -14,8 +16,31 @@ const corsOptions = {
   // In development, allow all origins
   origin: function(origin, callback) {
     // For development, allow all origins
-    callback(null, true);
-    return;
+    if (process.env.NODE_ENV === 'development') {
+      callback(null, true);
+      return;
+    }
+    
+    // For production, use a specific list
+    const allowedOrigins = [
+      'https://student-expense-tracker-frontend.vercel.app',
+      'https://student-expense-tracker.vercel.app',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5000',
+      'http://127.0.0.1:5000',
+      // Add any other origins you need
+    ];
+    
+    // Allow requests with no origin (like mobile apps, curl requests, etc)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      // In development, allow all origins even if not in the list
+      // This helps with debugging
+      callback(null, true);
+    }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -84,13 +109,12 @@ app.use((req, res, next) => {
   // Override the end function to log response headers
   res.end = function(chunk, encoding) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('🔄 CORS Debug - Response Headers:', {
+      console.log('🔄 CORS Debug - Response headers:', {
         'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin') || 'not set',
         'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials') || 'not set',
-        'access-control-expose-headers': res.getHeader('Access-Control-Expose-Headers') || 'not set'
+        'status': res.statusCode
       });
     }
-    
     // Call the original end function
     originalEnd.call(this, chunk, encoding);
   };
@@ -136,8 +160,11 @@ async function createTestUser() {
     } else {
       console.log('ℹ️ Test user already exists');
     }
+    
+    return true;
   } catch (error) {
     console.error('❌ Error creating test user:', error);
+    return false;
   }
 }
 
@@ -146,7 +173,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// Auth routes
+// Auth routes - using auth_updated.js file
 const authRoutes = require('./routes/auth_updated');
 app.use('/api/auth', authRoutes);
 
@@ -170,6 +197,50 @@ app.use('/api/reports', reportsRoutes);
 const teamRoutes = require('./routes/team');
 app.use('/api/team', teamRoutes);
 
+// Start server
+const startServer = async () => {
+  try {
+    console.log('🚀 Starting server...');
+    
+    // Set up model associations
+    setupAssociations();
+    
+    // Test database connection
+    console.log('🔌 Testing database connection...');
+    const isConnected = await testConnection();
+    if (!isConnected) {
+      throw new Error('Failed to connect to the database');
+    }
+    
+    // Sync database models
+    console.log('🔄 Syncing database models...');
+    const isSynced = await syncDatabase();
+    if (!isSynced) {
+      throw new Error('Failed to sync database models');
+    }
+    
+    // Create test user
+    console.log('👤 Creating test user if not exists...');
+    await createTestUser();
+    
+    // Start the server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`✅ Server is running on http://0.0.0.0:${PORT} (accessible via http://localhost:${PORT})`);
+      console.log('📊 API Endpoints:');
+      console.log(`   - Health check: GET http://localhost:${PORT}/api/health`);
+      console.log(`   - Register: POST http://localhost:${PORT}/api/auth/register`);
+      console.log(`   - Login: POST http://localhost:${PORT}/api/auth/login`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    process.exit(1);
+  }
+};
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
@@ -183,40 +254,6 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!'
   });
 });
-
-// Start server
-const startServer = async () => {
-  try {
-    // Test database connection
-    console.log('🔌 Testing database connection...');
-    await testConnection();
-    
-    // Set up associations
-    setupAssociations();
-    
-    // Sync database (create tables if they don't exist)
-    await syncDatabase();
-    
-    // Create test user
-    await createTestUser();
-    
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Server URL: http://localhost:${PORT}`);
-      console.log('📊 API Endpoints:');
-      console.log(`   - Health check: GET http://localhost:${PORT}/api/health`);
-      console.log(`   - Register: POST http://localhost:${PORT}/api/auth/register`);
-      console.log(`   - Login: POST http://localhost:${PORT}/api/auth/login`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error.message);
-    if (error.stack) {
-      console.error('Stack trace:', error.stack);
-    }
-    process.exit(1);
-  }
-};
 
 // Start the server
 startServer();

@@ -86,20 +86,89 @@ const syncDatabase = async () => {
     await sequelize.authenticate();
     console.log('✅ Authentication successful, attempting to sync models');
     
-    // Try to sync without altering tables first
+    // Use force: false and alter: false first to avoid index issues
+    console.log('🔄 Performing initial sync with no schema changes...');
     await sequelize.sync({ force: false, alter: false });
-    console.log('✅ Basic database sync successful');
+    console.log('✅ Initial sync completed');
     
-    // Now try to make any needed alterations
-    // Wrap in try/catch to continue even if alters fail
+    // Instead of altering tables automatically, execute specific SQL to fix foreign keys
     try {
-      console.log('🔄 Applying schema changes...');
-      await sequelize.sync({ alter: true });
-      console.log('✅ Schema updates applied successfully');
+      console.log('🔄 Checking and fixing foreign key references...');
+      
+      // Get the queryInterface to run raw queries
+      const queryInterface = sequelize.getQueryInterface();
+      
+      // Check if tables exist before trying to alter them
+      const [tables] = await sequelize.query(
+        `SELECT table_name FROM information_schema.tables 
+         WHERE table_schema = '${process.env.DB_NAME || 'railway'}' AND table_type = 'BASE TABLE'`
+      );
+      
+      const tableNames = tables.map(t => t.TABLE_NAME || t.table_name);
+      console.log('Existing tables:', tableNames);
+      
+      // Only try to fix foreign keys for tables that exist
+      if (tableNames.includes('budgets')) {
+        console.log('Checking budgets table...');
+        // Check if the foreign key constraint exists and fix it if needed
+        await queryInterface.sequelize.query(
+          `ALTER TABLE budgets 
+           ADD CONSTRAINT fk_budgets_user 
+           FOREIGN KEY (user_id) REFERENCES users(id) 
+           ON DELETE CASCADE;`
+        ).catch(err => {
+          // Ignore errors about constraint already existing
+          if (!err.message.includes('Duplicate key name') && !err.message.includes('already exists')) {
+            console.warn('Warning fixing budgets foreign key:', err.message);
+          }
+        });
+      }
+      
+      if (tableNames.includes('documents')) {
+        console.log('Checking documents table...');
+        await queryInterface.sequelize.query(
+          `ALTER TABLE documents 
+           ADD CONSTRAINT fk_documents_user 
+           FOREIGN KEY (user_id) REFERENCES users(id) 
+           ON DELETE CASCADE;`
+        ).catch(err => {
+          if (!err.message.includes('Duplicate key name') && !err.message.includes('already exists')) {
+            console.warn('Warning fixing documents foreign key:', err.message);
+          }
+        });
+      }
+      
+      if (tableNames.includes('team_members')) {
+        console.log('Checking team_members table...');
+        // Fix invitedById foreign key
+        await queryInterface.sequelize.query(
+          `ALTER TABLE team_members 
+           ADD CONSTRAINT fk_team_members_invited_by 
+           FOREIGN KEY (invited_by_id) REFERENCES users(id) 
+           ON DELETE CASCADE;`
+        ).catch(err => {
+          if (!err.message.includes('Duplicate key name') && !err.message.includes('already exists')) {
+            console.warn('Warning fixing team_members invited_by_id foreign key:', err.message);
+          }
+        });
+        
+        // Fix userId foreign key
+        await queryInterface.sequelize.query(
+          `ALTER TABLE team_members 
+           ADD CONSTRAINT fk_team_members_user 
+           FOREIGN KEY (user_id) REFERENCES users(id) 
+           ON DELETE SET NULL;`
+        ).catch(err => {
+          if (!err.message.includes('Duplicate key name') && !err.message.includes('already exists')) {
+            console.warn('Warning fixing team_members user_id foreign key:', err.message);
+          }
+        });
+      }
+      
+      console.log('✅ Foreign key checks and fixes completed');
     } catch (alterError) {
       console.warn('⚠️ Could not apply all schema changes:', alterError.message);
       console.warn('The application will continue with existing schema');
-      // Don't return false here, as we want to continue even if alters fail
     }
     
     return true;
