@@ -8,23 +8,70 @@ const User = require('../models/User');
 
 // CORS configuration for auth routes
 const cors = require('cors');
-router.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow all origins in development
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    // In production, allow specific origins
+    const allowedOrigins = [
+      'https://student-expense-tracker-frontend.vercel.app',
+      'https://student-expense-tracker-frontend.onrender.com',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000'
+    ];
+    
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'Accept'],
-  exposedHeaders: ['set-cookie', 'Authorization'],
-  optionsSuccessStatus: 200
-}));
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-CSRF-Token',
+    'Accept',
+    'x-auth-token',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Methods',
+    'Origin',
+    'Cache-Control',
+    'Pragma'
+  ],
+  exposedHeaders: [
+    'set-cookie',
+    'Authorization',
+    'Content-Disposition',
+    'Access-Control-Allow-Origin'
+  ],
+  optionsSuccessStatus: 200,
+  maxAge: 86400, // 24 hours
+  preflightContinue: false
+};
+
+router.use(cors(corsOptions));
 
 // Helper function to generate JWT token
 const generateToken = (user) => {
+  if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET is not set in environment variables');
+    throw new Error('Server configuration error');
+  }
+  
   return jwt.sign(
     {
       id: user.id,
       email: user.email
     },
-    process.env.JWT_SECRET || 'your_jwt_secret',
+    process.env.JWT_SECRET,
     { expiresIn: '7d' }
   );
 };
@@ -259,7 +306,15 @@ router.get('/me', async (req, res) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not set in environment variables');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error'
+      });
+    }
+    
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Get user from database
     const user = await User.findByPk(decoded.id, {

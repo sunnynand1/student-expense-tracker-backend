@@ -10,39 +10,26 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Enhanced CORS setup for production and development
-const allowedOrigins = [
-  'https://student-expense-tracker-frontend.vercel.app', // Production frontend
-  'https://student-expense-tracker-frontend.onrender.com', // Render frontend
-  'http://localhost:3000', // Local development
-  'http://localhost:3001', // Common alternative port
-  'http://localhost:5000', // Common backend port
-  'http://localhost:8080'  // Common alternative backend port
-];
-
-// In production, allow all origins for now (you can restrict this later)
 const corsOptions = {
-  origin: function(origin, callback) {
-    // Allow all in development or if no origin (like mobile apps or curl requests)
-    if (process.env.NODE_ENV !== 'production' || !origin) {
+  origin: function (origin, callback) {
+    // Allow all origins in development
+    if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
     
-    // In production, check against allowed origins
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
+    // In production, allow specific origins
+    const allowedOrigins = [
+      'https://student-expense-tracker-frontend.vercel.app',
+      'https://student-expense-tracker-frontend.onrender.com',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000'
+    ];
     
-    // Allow subdomains of vercel.app and onrender.com
-    if (
-      origin.endsWith('.vercel.app') || 
-      origin.endsWith('.onrender.com') ||
-      origin.includes('localhost:') || 
-      origin.includes('127.0.0.1:')
-    ) {
-      return callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
     }
-    
-    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -61,8 +48,8 @@ const corsOptions = {
     'Pragma'
   ],
   exposedHeaders: [
-    'set-cookie', 
-    'Authorization', 
+    'set-cookie',
+    'Authorization',
     'Content-Disposition',
     'Access-Control-Allow-Origin'
   ],
