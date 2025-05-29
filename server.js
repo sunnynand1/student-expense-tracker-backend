@@ -12,27 +12,44 @@ const PORT = process.env.PORT || 5000;
 // Enhanced CORS setup for production and development
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow all origins in development
+    // Allow all origins in development and testing
     if (process.env.NODE_ENV !== 'production') {
+      console.log('Allowing all origins in development mode');
       return callback(null, true);
     }
-    
+
     // In production, allow specific origins
     const allowedOrigins = [
       'https://student-expense-tracker-frontend.vercel.app',
-      'https://student-expense-tracker-frontend.onrender.com',
+      'https://student-expense-tracker.onrender.com',
       'http://localhost:3000',
       'http://127.0.0.1:3000'
     ];
-    
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
+
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Normalize the origin by removing trailing slashes and protocol
+    const normalizeOrigin = (url) => {
+      if (!url) return '';
+      return url.toString().replace(/\/+$/, '').toLowerCase();
+    };
+
+    const normalizedOrigin = normalizeOrigin(origin);
+    const isAllowed = allowedOrigins.some(allowed => 
+      normalizedOrigin === normalizeOrigin(allowed)
+    );
+
+    if (isAllowed) {
+      console.log(`✅ Allowed origin: ${origin}`);
+      return callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.warn(`🚫 Blocked origin: ${origin}`);
+      return callback(new Error(`Not allowed by CORS. Origin: ${origin}`), false);
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
@@ -40,82 +57,50 @@ const corsOptions = {
     'X-CSRF-Token',
     'Accept',
     'x-auth-token',
-    'Access-Control-Allow-Origin',
-    'Access-Control-Allow-Headers',
-    'Access-Control-Allow-Methods',
     'Origin',
-    'Cache-Control',
-    'Pragma'
+    'Accept-Version',
+    'Content-Length',
+    'Content-MD5',
+    'Date',
+    'X-Api-Version',
+    'X-Response-Time'
   ],
   exposedHeaders: [
-    'set-cookie',
-    'Authorization',
+    'Content-Range',
+    'X-Content-Range',
     'Content-Disposition',
-    'Access-Control-Allow-Origin'
+    'X-File-Name',
+    'Authorization',
+    'Set-Cookie'
   ],
-  optionsSuccessStatus: 200,
-  maxAge: 86400, // 24 hours
+  optionsSuccessStatus: 204, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  maxAge: 600, // 10 minutes (reduces the number of preflight requests)
   preflightContinue: false
 };
 
 // Trust first proxy (needed for secure cookies in production)
 app.set('trust proxy', 1);
 
-// Apply CORS with the specified options - ensure this is before any routes
+// Apply CORS with the specified options
 app.use(cors(corsOptions));
 
 // Handle OPTIONS preflight requests explicitly
 app.options('*', cors(corsOptions));
 
-// Add comprehensive CORS debug middleware
+// Add CORS headers to all responses
 app.use((req, res, next) => {
-  // Only log in development environment to avoid cluttering production logs
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('🔄 CORS Debug - Request:', {
-      method: req.method,
-      url: req.originalUrl,
-      origin: req.headers.origin || 'not set',
-      referer: req.headers.referer || 'not set',
-      host: req.headers.host || 'not set',
-      authorization: req.headers.authorization ? 'present' : 'not set',
-      contentType: req.headers['content-type'] || 'not set'
-    });
-  }
-  
-  // Ensure CORS headers are set for all responses
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token, Accept, x-auth-token');
   res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Expose-Headers', 'Authorization, set-cookie');
+  res.header('Access-Control-Max-Age', '86400');
   
-  // Handle preflight requests manually if needed
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
     return res.status(204).end();
   }
-  
-  // Continue to next middleware
-  next();
-});
-
-// Add response interceptor to debug CORS issues
-app.use((req, res, next) => {
-  // Store the original end function
-  const originalEnd = res.end;
-  
-  // Override the end function to log response headers
-  res.end = function(chunk, encoding) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔄 CORS Debug - Response Headers:', {
-        'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin') || 'not set',
-        'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials') || 'not set',
-        'access-control-expose-headers': res.getHeader('Access-Control-Expose-Headers') || 'not set'
-      });
-    }
-    
-    // Call the original end function
-    originalEnd.call(this, chunk, encoding);
-  };
   
   next();
 });
@@ -164,43 +149,139 @@ async function createTestUser() {
 }
 
 // Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+// Root route - Return API information
+app.get(['/', '/api'], (req, res) => {
+  try {
+    const requestDetails = {
+      url: req.originalUrl,
+      method: req.method,
+      headers: req.headers,
+      ip: req.ip,
+      protocol: req.protocol,
+      secure: req.secure,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('📡 Incoming request:', JSON.stringify(requestDetails, null, 2));
+    
+    const apiInfo = {
+      status: 'success',
+      message: 'Student Expense Tracker API',
+      version: '1.0.0',
+      documentation: 'https://github.com/sunnynand1/student-expense-tracker',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      nodeVersion: process.version,
+      endpoints: {
+        health: {
+          method: 'GET',
+          path: '/api/health',
+          description: 'Health check endpoint'
+        },
+        auth: {
+          register: {
+            method: 'POST',
+            path: '/api/auth/register',
+            description: 'Register a new user'
+          },
+          login: {
+            method: 'POST',
+            path: '/api/auth/login',
+            description: 'Login user'
+          },
+          me: {
+            method: 'GET',
+            path: '/api/auth/me',
+            description: 'Get current user info',
+            requiresAuth: true
+          }
+        },
+        expenses: {
+          method: 'GET',
+          path: '/api/expenses',
+          description: 'Get all expenses',
+          requiresAuth: true
+        },
+        budgets: {
+          method: 'GET',
+          path: '/api/budgets',
+          description: 'Get all budgets',
+          requiresAuth: true
+        }
+      }
+    };
+    
+    res.json(apiInfo);
+  } catch (error) {
+    console.error('Error in root route handler:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
-// Auth routes
+// Health check endpoint with detailed server information
+app.get('/api/health', (req, res) => {
+  try {
+    const healthCheck = {
+      status: 'ok',
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      nodeVersion: process.version,
+      platform: process.platform,
+      memoryUsage: process.memoryUsage(),
+      request: {
+        method: req.method,
+        url: req.originalUrl,
+        path: req.path,
+        host: req.get('host'),
+        ip: req.ip,
+        protocol: req.protocol,
+        secure: req.secure
+      }
+    };
+    
+    res.json(healthCheck);
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
+});
+
+// Import route files
 const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
-
-// Expenses routes
 const expensesRoutes = require('./routes/expenses');
-app.use('/api/expenses', expensesRoutes);
-
-// Budgets routes
 const budgetsRoutes = require('./routes/budgets');
+
+// Use routes
+app.use('/api/auth', authRoutes);
+app.use('/api/expenses', expensesRoutes);
 app.use('/api/budgets', budgetsRoutes);
-
-// Documents routes
-const documentsRoutes = require('./routes/documents');
-app.use('/api/documents', documentsRoutes);
-
-// Reports routes
-const reportsRoutes = require('./routes/reports');
-app.use('/api/reports', reportsRoutes);
-
-// Team routes have been removed
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found' });
+  res.status(404).json({
+    status: 'error',
+    message: 'Endpoint not found',
+    path: req.path
+  });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err);
   res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong!'
+    status: 'error',
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
@@ -209,28 +290,24 @@ const startServer = async () => {
   try {
     // Log environment info
     console.log('🚀 Starting server with environment:', process.env.NODE_ENV || 'development');
-    console.log('🔌 Testing database connection...');
-    
-    // Log database connection info (without credentials)
-    if (process.env.DATABASE_URL) {
-      const dbUrl = new URL(process.env.DATABASE_URL);
-      console.log(`📡 Database: ${dbUrl.protocol}//${dbUrl.hostname}:${dbUrl.port}${dbUrl.pathname}`);
-    } else {
-      console.log(`📡 Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '3306'}/${process.env.DB_NAME || 'railway'}`);
-    }
+    console.log('🔌 Using PORT from environment:', process.env.PORT || '5000 (default)');
+    console.log('🌐 NODE_ENV:', process.env.NODE_ENV || 'development');
+    console.log('🔗 Database Host:', process.env.DB_HOST ? 'Set' : 'Not set');
+    console.log('🔒 JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
     
     // Test database connection
+    console.log('🔌 Testing database connection...');
     await testConnection();
     
-    // Set up associations
+    // Set up model associations
     console.log('🔗 Setting up database associations...');
-    await setupAssociations();
+    setupAssociations();
     
     // Sync database
     console.log('🔄 Syncing database...');
     await syncDatabase();
     
-    // Create test user if in development
+    // Create test user in development
     if (process.env.NODE_ENV !== 'production') {
       console.log('👤 Creating test user for development...');
       await createTestUser();
