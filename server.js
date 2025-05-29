@@ -23,8 +23,10 @@ const corsOptions = {
       'https://student-expense-tracker-frontend.vercel.app',
       'https://student-expense-tracker.onrender.com',
       'http://localhost:3000',
-      'http://127.0.0.1:3000'
+      'http://127.0.0.1:3000',
     ];
+    
+    console.log('CORS Check - Request Origin:', origin);
 
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
@@ -63,7 +65,10 @@ const corsOptions = {
     'Content-MD5',
     'Date',
     'X-Api-Version',
-    'X-Response-Time'
+    'X-Response-Time',
+    'Cache-Control',
+    'Pragma',
+    'Expires'
   ],
   exposedHeaders: [
     'Content-Range',
@@ -71,12 +76,19 @@ const corsOptions = {
     'Content-Disposition',
     'X-File-Name',
     'Authorization',
-    'Set-Cookie'
+    'Set-Cookie',
+    'Access-Control-Allow-Credentials'
   ],
   optionsSuccessStatus: 204, // Some legacy browsers (IE11, various SmartTVs) choke on 204
   maxAge: 600, // 10 minutes (reduces the number of preflight requests)
   preflightContinue: false
 };
+
+// Add CORS middleware with the options
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Trust first proxy (needed for secure cookies in production)
 app.set('trust proxy', 1);
