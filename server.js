@@ -10,12 +10,26 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Enhanced CORS setup for production and development
+const allowedOrigins = [
+  'https://student-expense-tracker-frontend.vercel.app', // Production frontend
+  'http://localhost:3000' // Local development
+];
+
 const corsOptions = {
-  // In development, allow all origins
   origin: function(origin, callback) {
-    // For development, allow all origins
-    callback(null, true);
-    return;
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if the origin is in the allowed list or is a localhost request
+    if (
+      allowedOrigins.indexOf(origin) !== -1 || 
+      origin.includes('localhost:') || 
+      origin.includes('127.0.0.1:')
+    ) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -29,11 +43,19 @@ const corsOptions = {
     'Access-Control-Allow-Origin',
     'Access-Control-Allow-Headers',
     'Access-Control-Allow-Methods',
-    'Origin'
+    'Origin',
+    'Cache-Control',
+    'Pragma'
   ],
-  exposedHeaders: ['set-cookie', 'Authorization', 'Content-Disposition'],
+  exposedHeaders: [
+    'set-cookie', 
+    'Authorization', 
+    'Content-Disposition',
+    'Access-Control-Allow-Origin'
+  ],
   optionsSuccessStatus: 200,
-  maxAge: 86400 // 24 hours
+  maxAge: 86400, // 24 hours
+  preflightContinue: false
 };
 
 // Trust first proxy (needed for secure cookies in production)

@@ -59,11 +59,13 @@ module.exports = (sequelize) => {
     },
     planId: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
+      field: 'plan_id'  // Explicitly set the database column name
     },
     planName: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
+      field: 'plan_name'  // Explicitly set the database column name
     },
     userId: {
       type: DataTypes.INTEGER,
@@ -76,7 +78,7 @@ module.exports = (sequelize) => {
   }, {
     tableName: 'budgets',
     timestamps: true,
-    underscored: true,
+    underscored: true, // This will automatically convert camelCase to snake_case for all fields
     // Add hooks for additional validation or logging
     hooks: {
       beforeValidate: (budget, options) => {

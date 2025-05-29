@@ -1,69 +1,49 @@
 const { Sequelize } = require('sequelize');
 
-// Database configuration
+// Railway database configuration
 const dbConfig = {
-  HOST: process.env.DB_HOST || 'localhost',
-  USER: process.env.DB_USER || 'root',          // MySQL username
-  PASSWORD: process.env.DB_PASSWORD || '',      // MySQL password
-  DB: process.env.DB_NAME || 'student_expense_tracker',
-  PORT: process.env.DB_PORT || 3306,    // Database port
+  HOST: 'turntable.proxy.rlwy.net',
+  USER: 'root',
+  PASSWORD: 'UwbuTjEKJxTEgUsponAZcUwtEKlJlxwM',
+  DB: 'railway',
+  PORT: 11148,
   dialect: 'mysql',
-  logging: false,        // Disable logging for now
+  logging: console.log,  // Enable logging for debugging
   pool: {
     max: 5,
     min: 0,
     acquire: 30000,
     idle: 10000
-  }
+  },
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    },
+    useUTC: false,
+    dateStrings: true,
+    typeCast: true,
+    timezone: '+05:30'  // IST timezone
+  },
+  timezone: '+05:30' // Set your timezone here
 };
 
-// Check if we're using a Railway connection string
 let sequelize;
-const railwayConnectionString = process.env.DATABASE_URL;
 
-if (railwayConnectionString) {
-  console.log('Using Railway connection string');
-  // If we have a connection string, use it directly
-  sequelize = new Sequelize(railwayConnectionString, {
-    dialect: 'mysql',
-    logging: false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
-    },
-    dialectOptions: {
-      // Add this for proper timezone handling
-      useUTC: false,
-      dateStrings: true,
-      typeCast: true,
-      timezone: '+05:30'  // IST timezone
-    },
-    timezone: '+05:30' // Set your timezone here
-  });
-} else {
-  // Create Sequelize instance with individual parameters
-  sequelize = new Sequelize(dbConfig.DB, dbConfig.USER, dbConfig.PASSWORD, {
-    host: dbConfig.HOST,
-    port: dbConfig.PORT,
-    dialect: dbConfig.dialect,
-    logging: dbConfig.logging,
-    pool: dbConfig.pool,
-    define: {
-      timestamps: true,
-      underscored: true
-    },
-    dialectOptions: {
-      // Add this for proper timezone handling
-      useUTC: false,
-      dateStrings: true,
-      typeCast: true,
-      timezone: '+05:30'  // IST timezone
-    },
-    timezone: '+05:30' // Set your timezone here
-  });
-}
+// Create Sequelize instance with Railway configuration
+sequelize = new Sequelize(dbConfig.DB, dbConfig.USER, dbConfig.PASSWORD, {
+  host: dbConfig.HOST,
+  port: dbConfig.PORT,
+  dialect: dbConfig.dialect,
+  logging: dbConfig.logging,
+  pool: dbConfig.pool,
+  define: {
+    timestamps: true,
+    underscored: true
+  },
+  dialectOptions: dbConfig.dialectOptions,
+  timezone: dbConfig.timezone
+});
 
 // Test database connection with detailed error reporting
 const testConnection = async () => {
