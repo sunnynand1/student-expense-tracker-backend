@@ -12,24 +12,37 @@ const PORT = process.env.PORT || 5000;
 // Enhanced CORS setup for production and development
 const allowedOrigins = [
   'https://student-expense-tracker-frontend.vercel.app', // Production frontend
-  'http://localhost:3000' // Local development
+  'https://student-expense-tracker-frontend.onrender.com', // Render frontend
+  'http://localhost:3000', // Local development
+  'http://localhost:3001', // Common alternative port
+  'http://localhost:5000', // Common backend port
+  'http://localhost:8080'  // Common alternative backend port
 ];
 
+// In production, allow all origins for now (you can restrict this later)
 const corsOptions = {
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow all in development or if no origin (like mobile apps or curl requests)
+    if (process.env.NODE_ENV !== 'production' || !origin) {
+      return callback(null, true);
+    }
     
-    // Check if the origin is in the allowed list or is a localhost request
+    // In production, check against allowed origins
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    
+    // Allow subdomains of vercel.app and onrender.com
     if (
-      allowedOrigins.indexOf(origin) !== -1 || 
+      origin.endsWith('.vercel.app') || 
+      origin.endsWith('.onrender.com') ||
       origin.includes('localhost:') || 
       origin.includes('127.0.0.1:')
     ) {
       return callback(null, true);
     }
     
-    callback(new Error('Not allowed by CORS'));
+    callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -207,30 +220,64 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    // Test database connection
+    // Log environment info
+    console.log('🚀 Starting server with environment:', process.env.NODE_ENV || 'development');
     console.log('🔌 Testing database connection...');
+    
+    // Log database connection info (without credentials)
+    if (process.env.DATABASE_URL) {
+      const dbUrl = new URL(process.env.DATABASE_URL);
+      console.log(`📡 Database: ${dbUrl.protocol}//${dbUrl.hostname}:${dbUrl.port}${dbUrl.pathname}`);
+    } else {
+      console.log(`📡 Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '3306'}/${process.env.DB_NAME || 'railway'}`);
+    }
+    
+    // Test database connection
     await testConnection();
     
     // Set up associations
-    setupAssociations();
+    console.log('🔗 Setting up database associations...');
+    await setupAssociations();
     
-    // Sync database (create tables if they don't exist)
+    // Sync database
+    console.log('🔄 Syncing database...');
     await syncDatabase();
     
-    // Create test user
-    await createTestUser();
+    // Create test user if in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('👤 Creating test user for development...');
+      await createTestUser();
+    }
     
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Server URL: http://localhost:${PORT}`);
-      console.log('📊 API Endpoints:');
-      console.log(`   - Health check: GET http://localhost:${PORT}/api/health`);
-      console.log(`   - Register: POST http://localhost:${PORT}/api/auth/register`);
-      console.log(`   - Login: POST http://localhost:${PORT}/api/auth/login`);
+    // Start listening
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n✅ Server is running on port ${PORT}`);
+      console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📅 Server time: ${new Date().toISOString()}`);
+      console.log(`🚀 API Base URL: http://localhost:${PORT}/api`);
+      console.log('\n📚 Available API Endpoints:');
+      console.log(`   GET    /api/health          - Health check endpoint`);
+      console.log(`   POST   /api/auth/register   - Register a new user`);
+      console.log(`   POST   /api/auth/login      - Login user`);
+      console.log(`   GET    /api/expenses       - Get all expenses`);
+      console.log(`   POST   /api/expenses       - Create a new expense`);
+      console.log(`   GET    /api/budgets        - Get all budgets`);
+      console.log(`   POST   /api/budgets        - Create a new budget\n`);
     });
+    
+    // Handle server errors
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use`);
+      } else {
+        console.error('❌ Server error:', error);
+      }
+      process.exit(1);
+    });
+    
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
+    console.error('Error details:', error);
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }

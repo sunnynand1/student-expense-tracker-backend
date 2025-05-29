@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: student-expense-tracker-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        fromDatabase:
+          name: railway
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_SSL
+        value: 'true'
+      - key: TZ
+        value: 'Asia/Kolkata'

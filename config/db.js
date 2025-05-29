@@ -1,14 +1,9 @@
 const { Sequelize } = require('sequelize');
 
-// Railway database configuration
+// Database configuration with environment variables
 const dbConfig = {
-  HOST: 'turntable.proxy.rlwy.net',
-  USER: 'root',
-  PASSWORD: 'UwbuTjEKJxTEgUsponAZcUwtEKlJlxwM',
-  DB: 'railway',
-  PORT: 11148,
   dialect: 'mysql',
-  logging: console.log,  // Enable logging for debugging
+  logging: process.env.NODE_ENV === 'development' ? console.log : false,
   pool: {
     max: 5,
     min: 0,
@@ -23,27 +18,44 @@ const dbConfig = {
     useUTC: false,
     dateStrings: true,
     typeCast: true,
-    timezone: '+05:30'  // IST timezone
+    timezone: process.env.TZ || '+05:30'  // Use TZ environment variable or default to IST
   },
-  timezone: '+05:30' // Set your timezone here
+  timezone: process.env.TZ || '+05:30'
 };
 
 let sequelize;
 
-// Create Sequelize instance with Railway configuration
-sequelize = new Sequelize(dbConfig.DB, dbConfig.USER, dbConfig.PASSWORD, {
-  host: dbConfig.HOST,
-  port: dbConfig.PORT,
-  dialect: dbConfig.dialect,
-  logging: dbConfig.logging,
-  pool: dbConfig.pool,
-  define: {
-    timestamps: true,
-    underscored: true
-  },
-  dialectOptions: dbConfig.dialectOptions,
-  timezone: dbConfig.timezone
-});
+// Use DATABASE_URL from environment if available, otherwise use individual parameters
+if (process.env.DATABASE_URL) {
+  // Parse the database URL
+  const url = new URL(process.env.DATABASE_URL);
+  
+  // Create Sequelize instance with DATABASE_URL
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    ...dbConfig,
+    dialect: 'mysql',
+    protocol: 'mysql',
+    dialectOptions: {
+      ...dbConfig.dialectOptions,
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    }
+  });
+} else {
+  // Fallback to individual environment variables
+  sequelize = new Sequelize(
+    process.env.DB_NAME || 'railway',
+    process.env.DB_USER || 'root',
+    process.env.DB_PASSWORD || '',
+    {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      ...dbConfig
+    }
+  );
+}
 
 // Test database connection with detailed error reporting
 const testConnection = async () => {
